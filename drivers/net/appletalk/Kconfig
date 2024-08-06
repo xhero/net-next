@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Appletalk driver configuration
+#
+
+config DEV_APPLETALK
+	tristate "Appletalk interfaces support"
+	depends on ATALK
+	help
+	  AppleTalk is the protocol that Apple computers can use to communicate
+	  on a network.  If your Linux box is connected to such a network, and wish
+	  to do IP over it, or you have a LocalTalk card and wish to use it to
+	  connect to the AppleTalk network, say Y.
+
+config TASHTALK
+	tristate "TashTalk LocalTalk Interface SUpport"
+	depends on ATALK && DEV_APPLETALK
+	depends on NETDEVICES
+	help
+	  Please read the file
+	  <file:Documentation/networking/device_drivers/appletalk/tashtalk.rst>.
+
