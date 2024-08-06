@@ -100,11 +100,9 @@ static int tash_maxdev = TASH_MAX_CHAN;
 module_param(tash_maxdev, int, 0);
 MODULE_PARM_DESC(tash_maxdev, "Maximum number of tashtalk devices");
 
-static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
-				      unsigned char src, unsigned char type);
+static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst, unsigned char src, unsigned char type);
 
-unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
-					 unsigned char addr);
+static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt, unsigned char addr);
 
 static void tash_setbits(struct tashtalk *tt, unsigned char addr)
 {
@@ -123,8 +121,8 @@ static void tash_setbits(struct tashtalk *tt, unsigned char addr)
 
 	if (tash_debug)
 		netdev_dbg(tt->dev,
-		           "TashTalk: setting address %i (byte %i bit %i) for you.",
-		            addr, byte - 1, pos);
+			   "TashTalk: setting address %i (byte %i bit %i) for you.",
+			    addr, byte - 1, pos);
 
 	bits[0] = 0x02; // the command
 	bits[byte] = (1 << pos);
@@ -222,7 +220,7 @@ static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 
 	if (tash_debug)
 		netdev_dbg(tt->dev, "TashTalk: transmit actual %i, requested %i",
-		       actual, len);
+			   actual, len);
 
 	if (actual == len) {
 		clear_bit(TTY_DO_WRITE_WAKEUP, &tt->tty->flags);
@@ -249,7 +247,8 @@ static void tash_transmit_worker(struct work_struct *work)
 	// No more data?
 	if (tt->xleft <= 0) {
 		/* reset the flags for transmission
-		and re-wake the netif queue */
+		 * and re-wake the netif queue
+		 */
 		tt->dev->stats.tx_packets++;
 		clear_bit(TTY_DO_WRITE_WAKEUP, &tt->tty->flags);
 		spin_unlock_bh(&tt->lock);
@@ -267,8 +266,7 @@ static void tash_transmit_worker(struct work_struct *work)
 	spin_unlock_bh(&tt->lock);
 }
 
-/*
- * Called by the driver when there's room for more data.
+/* Called by the driver when there's room for more data.
  * Schedule the transmit.
  */
 static void tashtalk_write_wakeup(struct tty_struct *tty)
@@ -302,7 +300,7 @@ static netdev_tx_t tt_transmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (skb->len > tt->mtu) {
 		netdev_err(dev,
-		       "TashTalk: %s dropping oversized transmit packet %i vs %i!\n",
+			   "TashTalk: %s dropping oversized transmit packet %i vs %i!\n",
 		       dev->name, skb->len, tt->mtu);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
@@ -315,7 +313,7 @@ static netdev_tx_t tt_transmit(struct sk_buff *skb, struct net_device *dev)
 	if (!netif_running(dev)) {
 		spin_unlock(&tt->lock);
 		netdev_err(dev,
-		       "TashTalk: %s: transmit call when iface is down\n",
+			   "TashTalk: %s: transmit call when iface is down\n",
 		       dev->name);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
@@ -364,7 +362,7 @@ static int tt_open(struct net_device *dev)
 {
 	struct tashtalk *tt = netdev_priv(dev);
 
-	if (tt->tty == NULL) {
+	if (!tt->tty) {
 		netdev_err(dev, "TashTalk: %s TTY not open", dev->name);
 		return -ENODEV;
 	}
@@ -393,17 +391,17 @@ static void tt_get_stats64(struct net_device *dev,
 }
 
 // This has to be blocking for compatibility with netatalk
-unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
-					 unsigned char addr)
+static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
+										unsigned char addr)
 {
 	unsigned char min, max;
 	unsigned char rand;
 	int i;
 
 	/* This works a bit backwards, we send many ENQs
-	   and are happy not to receive ACKs.
-	   If we get ACK, we try another addr
-	*/
+	 * and are happy not to receive ACKs.
+	 * If we get ACK, we try another addr
+	 */
 
 	// Set the ranges, the new address hould stay in the proper one
 	if (addr < 129) {
@@ -416,7 +414,7 @@ unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 
 	if (tash_debug)
 		netdev_dbg(tt->dev,
-		       "TashTalk: start address arbitration, requested %i",
+			   "TashTalk: start address arbitration, requested %i",
 		       addr);
 
 	set_bit(TT_FLAG_WAITADDR, &tt->flags);
@@ -436,7 +434,7 @@ unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 			newaddr = min + rand % (max - min + 1);
 			if (tash_debug)
 				netdev_dbg(tt->dev,
-				       "TashTalk: addr %i is in use, try %i",
+					   "TashTalk: addr %i is in use, try %i",
 				       addr, newaddr);
 			addr = newaddr;
 		}
@@ -452,7 +450,7 @@ unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 
 static int tt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
-    struct sockaddr_at *sa = (struct sockaddr_at *)&ifr->ifr_addr;
+	struct sockaddr_at *sa = (struct sockaddr_at *)&ifr->ifr_addr;
 	struct tashtalk *tt = netdev_priv(dev);
 	struct atalk_addr *aa = &tt->node_addr;
 
@@ -500,7 +498,7 @@ static void tt_free_netdev(struct net_device *dev)
 static void tt_set_multicast(struct net_device *dev)
 {
 	netdev_info(dev, "TashTalk: %s set_multicast_list executed\n",
-	       dev->name);
+		    dev->name);
 }
 
 static const struct net_device_ops tt_netdev_ops = {
@@ -516,7 +514,7 @@ static const struct net_device_ops tt_netdev_ops = {
 static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
 				      unsigned char src, unsigned char type)
 {
-    unsigned char cmd = 0x01;
+	unsigned char cmd = 0x01;
 	unsigned char buf[5];
 	int actual;
 	u16 crc;
@@ -542,9 +540,9 @@ static void tashtalk_manage_control_frame(struct tashtalk *tt)
 		    tt->rbuff[LLAP_SRC_POS] == tt->node_addr.s_node) {
 			if (tash_debug) {
 				netdev_dbg(tt->dev,
-				       "TashTalk: repply ACK to ENQ from %i",
+					   "TashTalk: repply ACK to ENQ from %i",
 				       tt->rbuff[LLAP_SRC_POS]);
-            }
+			}
 
 			tashtalk_send_ctrl_packet(tt, tt->rbuff[LLAP_SRC_POS],
 						  tt->node_addr.s_node,
@@ -572,7 +570,7 @@ static void tashtalk_manage_valid_frame(struct tashtalk *tt)
 {
 	if (tash_debug)
 		netdev_dbg(tt->dev, "(3) TashTalk done frame, len=%i",
-		       tt->rcount);
+			   tt->rcount);
 
 	// echo 'file tashtalk.c line 403 +p' > /sys/kernel/debug/dynamic_debug/control
 	print_hex_dump_bytes("(3a) LLAP IN frame: ", DUMP_PREFIX_NONE,
@@ -613,9 +611,9 @@ static void tashtalk_manage_escape(struct tashtalk *tt, unsigned char seq)
 	clear_bit(TT_FLAG_INFRAME, &tt->flags);
 }
 
-/********************************************
-  Routines looking at TTY talking to TashTalk
- ********************************************/
+/*********************************************
+ * Routines looking at TTY talking to TashTalk
+ *********************************************/
 
 static void tashtalk_receive_buf(struct tty_struct *tty,
 				 const u8 *cp, const u8 *fp,
@@ -639,7 +637,7 @@ static void tashtalk_receive_buf(struct tty_struct *tty,
 			netdev_dbg(tt->dev, "(2) TashTalk start new frame");
 	} else if (tash_debug) {
 		netdev_dbg(tt->dev, "(2) TashTalk continue frame");
-    }
+	}
 
 	set_bit(TT_FLAG_INFRAME, &tt->flags);
 
@@ -666,7 +664,7 @@ static void tashtalk_receive_buf(struct tty_struct *tty,
 
 	if (tash_debug)
 		netdev_dbg(tt->dev, "(5) Done read, pending frame=%i",
-		       test_bit(TT_FLAG_INFRAME, &tt->flags));
+			   test_bit(TT_FLAG_INFRAME, &tt->flags));
 }
 
 /* Free a channel buffers. */
@@ -771,8 +769,7 @@ static struct tashtalk *tt_alloc(void)
 	return tt;
 }
 
-/*
- * Open the high-level part of the TashTalk channel.
+/* Open the high-level part of the TashTalk channel.
  * Generally used with an userspave program:
  * sudo ldattach -d -s 1000000 PPP /dev/ttyUSB0
  */
@@ -935,7 +932,7 @@ static int __init tashtalk_init(void)
 		tash_maxdev = 1;
 
 	pr_info("TashTalk Interface (dynamic channels, max=%d)",
-	       tash_maxdev);
+		tash_maxdev);
 
 	tastalk_devs =
 		kcalloc(tash_maxdev, sizeof(struct net_device *), GFP_KERNEL);
@@ -954,7 +951,7 @@ static int __init tashtalk_init(void)
 
 static void __exit tashtalk_exit(void)
 {
-    unsigned long timeout = jiffies + HZ;
+	unsigned long timeout = jiffies + HZ;
 	struct net_device *dev;
 	struct tashtalk *tt;
 	int busy = 0;
@@ -982,9 +979,6 @@ static void __exit tashtalk_exit(void)
 			spin_unlock_bh(&tt->lock);
 		}
 	} while (busy && time_before(jiffies, timeout));
-
-	/* FIXME: hangup is async so we should wait when doing this second
-	   phase */
 
 	for (i = 0; i < tash_maxdev; i++) {
 		dev = tastalk_devs[i];
