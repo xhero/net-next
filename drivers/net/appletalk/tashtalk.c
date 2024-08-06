@@ -100,7 +100,8 @@ static int tash_maxdev = TASH_MAX_CHAN;
 module_param(tash_maxdev, int, 0);
 MODULE_PARM_DESC(tash_maxdev, "Maximum number of tashtalk devices");
 
-static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst, unsigned char src, unsigned char type);
+static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
+				      unsigned char src, unsigned char type);
 
 static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt, unsigned char addr);
 
@@ -392,7 +393,7 @@ static void tt_get_stats64(struct net_device *dev,
 
 // This has to be blocking for compatibility with netatalk
 static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
-										unsigned char addr)
+						unsigned char addr)
 {
 	unsigned char min, max;
 	unsigned char rand;
