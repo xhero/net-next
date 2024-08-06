@@ -40,7 +40,6 @@
 #include <linux/if_ltalk.h>
 #include <linux/atalk.h>
 
-
 #ifndef TASH_DEBUG
 #define TASH_DEBUG 0
 #endif
@@ -101,7 +100,6 @@ static int tash_maxdev = TASH_MAX_CHAN;
 module_param(tash_maxdev, int, 0);
 MODULE_PARM_DESC(tash_maxdev, "Maximum number of tashtalk devices");
 
-
 static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
 				      unsigned char src, unsigned char type);
 
@@ -124,9 +122,9 @@ static void tash_setbits(struct tashtalk *tt, unsigned char addr)
 	pos = (addr % 8);
 
 	if (tash_debug)
-		printk(KERN_DEBUG
-		       "TashTalk: setting address %i (byte %i bit %i) for you.",
-		       addr, byte - 1, pos);
+		netdev_dbg(tt->dev,
+		           "TashTalk: setting address %i (byte %i bit %i) for you.",
+		            addr, byte - 1, pos);
 
 	bits[0] = 0x02; // the command
 	bits[byte] = (1 << pos);
@@ -147,9 +145,8 @@ static u16 tash_crc(const unsigned char *data, int len)
 {
 	u16 crc = 0xFFFF;
 
-	for (int i = 0; i < len; i++) {
+	for (int i = 0; i < len; i++)
 		crc = tt_crc_ccitt_update(crc, data[i]);
-	}
 
 	return crc;
 }
@@ -167,7 +164,7 @@ static void tt_post_to_netif(struct tashtalk *tt)
 
 	// 0xF0B8 is the magic crc nr
 	if (tash_crc(tt->rbuff, tt->rcount) != LLAP_CHECK) {
-		printk(KERN_WARNING "TashTalk: invalid CRC, drop packet");
+		netdev_warn(tt->dev, "TashTalk: invalid CRC, drop packet");
 		return;
 	}
 
@@ -175,10 +172,7 @@ static void tt_post_to_netif(struct tashtalk *tt)
 	dev->stats.rx_bytes += tt->rcount;
 
 	skb = dev_alloc_skb(tt->rcount);
-	if (skb == NULL) {
-		printk(KERN_WARNING
-		       "%s: unable to allocate memory, drop packet.\n",
-		       dev->name);
+	if (!skb) {
 		dev->stats.rx_dropped++;
 		return;
 	}
@@ -200,7 +194,7 @@ static void tt_post_to_netif(struct tashtalk *tt)
 /* Encapsulate one DDP datagram and stuff into a TTY queue. */
 static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 {
-    unsigned char crc_bytes[2];
+	unsigned char crc_bytes[2];
 	int actual;
 	u16 crc;
 
@@ -227,7 +221,7 @@ static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 			     DUMP_PREFIX_NONE, icp, len);
 
 	if (tash_debug)
-		printk(KERN_DEBUG "TashTalk: transmit actual %i, requested %i",
+		netdev_dbg(tt->dev, "TashTalk: transmit actual %i, requested %i",
 		       actual, len);
 
 	if (actual == len) {
@@ -260,23 +254,16 @@ static void tash_transmit_worker(struct work_struct *work)
 		clear_bit(TTY_DO_WRITE_WAKEUP, &tt->tty->flags);
 		spin_unlock_bh(&tt->lock);
 		netif_wake_queue(tt->dev);
-		if (tash_debug)
-			printk(KERN_DEBUG
-			       "TashTalk: transmission finished, on to next");
+
 		return;
 	}
 
 	// Send whatever is there to send
 	// This function will be calleg again if xleft <= 0
-	if (tash_debug)
-		printk(KERN_DEBUG "TashTalk: trasmit remaining bytes %i",
-		       tt->xleft);
 	actual = tt->tty->ops->write(tt->tty, tt->xhead, tt->xleft);
 	tt->xleft -= actual;
 	tt->xhead += actual;
-	if (tash_debug)
-		printk(KERN_DEBUG "TashTalk: Trasmitted actual bytes %i",
-		       actual);
+
 	spin_unlock_bh(&tt->lock);
 }
 
@@ -314,7 +301,7 @@ static netdev_tx_t tt_transmit(struct sk_buff *skb, struct net_device *dev)
 	struct tashtalk *tt = netdev_priv(dev);
 
 	if (skb->len > tt->mtu) {
-		printk(KERN_ERR
+		netdev_err(dev,
 		       "TashTalk: %s dropping oversized transmit packet %i vs %i!\n",
 		       dev->name, skb->len, tt->mtu);
 		dev_kfree_skb(skb);
@@ -322,21 +309,21 @@ static netdev_tx_t tt_transmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (tash_debug)
-		printk(KERN_DEBUG "TashTalk: send data on %s\n", dev->name);
+		netdev_dbg(dev, "TashTalk: send data on %s\n", dev->name);
 
 	spin_lock(&tt->lock);
 	if (!netif_running(dev)) {
 		spin_unlock(&tt->lock);
-		printk(KERN_ERR
+		netdev_err(dev,
 		       "TashTalk: %s: transmit call when iface is down\n",
 		       dev->name);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
-	if (tt->tty == NULL) {
+	if (!tt->tty) {
 		spin_unlock(&tt->lock);
 		dev_kfree_skb(skb);
-		printk(KERN_ERR "TashTalk: %s: TTY not connected\n", dev->name);
+		netdev_err(dev, "TashTalk: %s: TTY not connected\n", dev->name);
 		return NETDEV_TX_OK;
 	}
 
@@ -378,7 +365,7 @@ static int tt_open(struct net_device *dev)
 	struct tashtalk *tt = netdev_priv(dev);
 
 	if (tt->tty == NULL) {
-		printk(KERN_ERR "TashTalk: %s TTY not open", dev->name);
+		netdev_err(dev, "TashTalk: %s TTY not open", dev->name);
 		return -ENODEV;
 	}
 
@@ -428,7 +415,7 @@ unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 	}
 
 	if (tash_debug)
-		printk(KERN_DEBUG
+		netdev_dbg(tt->dev,
 		       "TashTalk: start address arbitration, requested %i",
 		       addr);
 
@@ -448,7 +435,7 @@ unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 			get_random_bytes(&rand, 1);
 			newaddr = min + rand % (max - min + 1);
 			if (tash_debug)
-				printk(KERN_DEBUG
+				netdev_dbg(tt->dev,
 				       "TashTalk: addr %i is in use, try %i",
 				       addr, newaddr);
 			addr = newaddr;
@@ -458,8 +445,7 @@ unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 	clear_bit(TT_FLAG_WAITADDR, &tt->flags);
 	clear_bit(TT_FLAG_GOTACK, &tt->flags);
 
-	if (tash_debug)
-		printk(KERN_DEBUG "TashTalk: arbitrated address is %i", addr);
+	netdev_info(tt->dev, "TashTalk: arbitrated address is %i", addr);
 
 	return addr;
 }
@@ -489,17 +475,12 @@ static int tt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		// Setup tashtalk to respond to that addr
 		tash_setbits(tt, aa->s_node);
 
-		if (tash_debug)
-			printk(KERN_DEBUG "TashTalk: set addr to: %i.%i",
-			       aa->s_net, aa->s_node);
 		return 0;
 
 	case SIOCGIFADDR:
 		sa->sat_addr.s_net = aa->s_net;
 		sa->sat_addr.s_node = aa->s_node;
-		if (tash_debug)
-			printk(KERN_DEBUG "TashTalk: read addr: %i.%i",
-			       aa->s_net, aa->s_node);
+
 		return 0;
 
 	default:
@@ -518,7 +499,7 @@ static void tt_free_netdev(struct net_device *dev)
 /* Copied from cops.c, make appletalk happy */
 static void tt_set_multicast(struct net_device *dev)
 {
-	printk(KERN_INFO "TashTalk: %s set_multicast_list executed\n",
+	netdev_info(dev, "TashTalk: %s set_multicast_list executed\n",
 	       dev->name);
 }
 
@@ -550,8 +531,6 @@ static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
 
 	actual = tt->tty->ops->write(tt->tty, &cmd, 1);
 	actual += tt->tty->ops->write(tt->tty, buf, sizeof(buf));
-	printk(KERN_DEBUG "TashTalk: control packet 0x%X sent to %i (%i)", type,
-	       dst, actual);
 }
 
 static void tashtalk_manage_control_frame(struct tashtalk *tt)
@@ -561,11 +540,12 @@ static void tashtalk_manage_control_frame(struct tashtalk *tt)
 
 		if (tt->node_addr.s_node != 0 &&
 		    tt->rbuff[LLAP_SRC_POS] == tt->node_addr.s_node) {
-			if (tash_debug)
-				printk(KERN_DEBUG
+			if (tash_debug) {
+				netdev_dbg(tt->dev,
 				       "TashTalk: repply ACK to ENQ from %i",
 				       tt->rbuff[LLAP_SRC_POS]);
-			//tashtalk_send_ack(tt, tt->rbuff[LLAP_SRC_POS]);
+            }
+
 			tashtalk_send_ctrl_packet(tt, tt->rbuff[LLAP_SRC_POS],
 						  tt->node_addr.s_node,
 						  LLAP_ACK);
@@ -591,8 +571,9 @@ static int tashtalk_is_control_frame(unsigned char *frame)
 static void tashtalk_manage_valid_frame(struct tashtalk *tt)
 {
 	if (tash_debug)
-		printk(KERN_DEBUG "(3) TashTalk done frame, len=%i",
+		netdev_dbg(tt->dev, "(3) TashTalk done frame, len=%i",
 		       tt->rcount);
+
 	// echo 'file tashtalk.c line 403 +p' > /sys/kernel/debug/dynamic_debug/control
 	print_hex_dump_bytes("(3a) LLAP IN frame: ", DUMP_PREFIX_NONE,
 			     tt->rbuff, tt->rcount);
@@ -604,7 +585,7 @@ static void tashtalk_manage_valid_frame(struct tashtalk *tt)
 		tt_post_to_netif(tt);
 
 	if (tash_debug)
-		printk(KERN_DEBUG "(4) TashTalk next frame");
+		netdev_dbg(tt->dev, "(4) TashTalk next frame");
 }
 
 static void tashtalk_manage_escape(struct tashtalk *tt, unsigned char seq)
@@ -614,17 +595,17 @@ static void tashtalk_manage_escape(struct tashtalk *tt, unsigned char seq)
 		tashtalk_manage_valid_frame(tt);
 		break;
 	case 0xFE:
-		printk(KERN_ERR "TashTalk: frame error");
+		netdev_err(tt->dev, "TashTalk: frame error");
 		break;
 	case 0xFA:
-		printk(KERN_ERR "TashTalk: frame abort");
+		netdev_err(tt->dev, "TashTalk: frame abort");
 		break;
 	case 0xFC:
-		printk(KERN_ERR "TashTalk: frame crc error");
+		netdev_err(tt->dev, "TashTalk: frame crc error");
 		break;
 
 	default:
-		printk(KERN_ERR "TashTalk: unknown escape sequence %c", seq);
+		netdev_err(tt->dev, "TashTalk: unknown escape sequence %c", seq);
 		break;
 	}
 
@@ -647,16 +628,18 @@ static void tashtalk_receive_buf(struct tty_struct *tty,
 		return;
 
 	if (tash_debug)
-		printk(KERN_DEBUG "(1) TashTalk read %li", count);
+		netdev_dbg(tt->dev, "(1) TashTalk read %li", count);
+
 	print_hex_dump_bytes("Tash read: ", DUMP_PREFIX_NONE, cp, count);
 
 	// Fresh frame
 	if (!test_bit(TT_FLAG_INFRAME, &tt->flags)) {
 		tt->rcount = 0;
 		if (tash_debug)
-			printk(KERN_DEBUG "(2) TashTalk start new frame");
-	} else if (tash_debug)
-		printk(KERN_DEBUG "(2) TashTalk continue frame");
+			netdev_dbg(tt->dev, "(2) TashTalk start new frame");
+	} else if (tash_debug) {
+		netdev_dbg(tt->dev, "(2) TashTalk continue frame");
+    }
 
 	set_bit(TT_FLAG_INFRAME, &tt->flags);
 
@@ -682,7 +665,7 @@ static void tashtalk_receive_buf(struct tty_struct *tty,
 	}
 
 	if (tash_debug)
-		printk(KERN_DEBUG "(5) Done read, pending frame=%i",
+		netdev_dbg(tt->dev, "(5) Done read, pending frame=%i",
 		       test_bit(TT_FLAG_INFRAME, &tt->flags));
 }
 
@@ -704,15 +687,15 @@ static int tt_alloc_bufs(struct tashtalk *tt, int mtu)
 	len = mtu * 2;
 
 	rbuff = kmalloc(len + 4, GFP_KERNEL);
-	if (rbuff == NULL)
+	if (!rbuff)
 		goto err_exit;
 
 	xbuff = kmalloc(len + 4, GFP_KERNEL);
-	if (xbuff == NULL)
+	if (!xbuff)
 		goto err_exit;
 
 	spin_lock_bh(&tt->lock);
-	if (tt->tty == NULL) {
+	if (!tt->tty) {
 		spin_unlock_bh(&tt->lock);
 		err = -ENODEV;
 		goto err_exit;
@@ -745,12 +728,12 @@ static struct tashtalk *tt_alloc(void)
 
 	for (i = 0; i < tash_maxdev; i++) {
 		dev = tastalk_devs[i];
-		if (dev == NULL)
+		if (!dev)
 			break;
 	}
 
 	if (i >= tash_maxdev) {
-		printk(KERN_ERR "TashTalk: all slots in use");
+		pr_err("TashTalk: all slots in use");
 		return NULL;
 	}
 
@@ -758,7 +741,7 @@ static struct tashtalk *tt_alloc(void)
 	dev = alloc_ltalkdev(sizeof(*tt));
 
 	if (!dev) {
-		printk(KERN_ERR "TashTalk: could not allocate ltalkdev");
+		pr_err("TashTalk: could not allocate ltalkdev");
 		return NULL;
 	}
 
@@ -802,7 +785,7 @@ static int tashtalk_open(struct tty_struct *tty)
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
-	if (tty->ops->write == NULL)
+	if (!tty->ops->write)
 		return -EOPNOTSUPP;
 
 	rtnl_lock();
@@ -817,7 +800,7 @@ static int tashtalk_open(struct tty_struct *tty)
 	err = -ENFILE;
 
 	tt = tt_alloc();
-	if (tt == NULL)
+	if (!tt)
 		goto err_exit;
 
 	tt->tty = tty;
@@ -836,7 +819,7 @@ static int tashtalk_open(struct tty_struct *tty)
 			goto err_free_bufs;
 
 	} else {
-		printk(KERN_ERR "TashTalk: Channel is already in use");
+		pr_err("TashTalk: Channel is already in use");
 	}
 
 	/* Done.  We have linked the TTY line to a channel. */
@@ -844,14 +827,14 @@ static int tashtalk_open(struct tty_struct *tty)
 	tty->receive_room = 65536; /* We don't flow control */
 
 	/* TTY layer expects 0 on success */
-	printk(KERN_INFO "TashTalk is on port %s", tty->name);
+	pr_info("TashTalk is on port %s", tty->name);
 	return 0;
 
 err_free_bufs:
 	tt_free_bufs(tt);
 
 err_free_chan:
-	printk(KERN_ERR "TashTalk: could not open device");
+	pr_err("TashTalk: could not open device");
 	tt->tty = NULL;
 	tty->disc_data = NULL;
 	clear_bit(TT_FLAG_INUSE, &tt->flags);
@@ -889,24 +872,12 @@ static void tashtalk_close(struct tty_struct *tty)
 	/* This will complete via tt_free_netdev */
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-static int tashtalk_hangup(struct tty_struct *tty)
-#else
 static void tashtalk_hangup(struct tty_struct *tty)
-#endif
 {
 	tashtalk_close(tty);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-	return 0;
-#endif
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-static int tashtalk_ioctl(struct tty_struct *tty, struct file *file,
-			  unsigned int cmd,
-#else
 static int tashtalk_ioctl(struct tty_struct *tty, unsigned int cmd,
-#endif
 			  unsigned long arg)
 {
 	struct tashtalk *tt = tty->disc_data;
@@ -940,11 +911,7 @@ static int tashtalk_ioctl(struct tty_struct *tty, unsigned int cmd,
 		return -EINVAL;
 
 	default:
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-		return tty_mode_ioctl(tty, 0, cmd, arg);
-#else
 		return tty_mode_ioctl(tty, cmd, arg);
-#endif
 	}
 }
 
@@ -967,7 +934,7 @@ static int __init tashtalk_init(void)
 	if (tash_maxdev < 1)
 		tash_maxdev = 1;
 
-	printk(KERN_INFO "TashTalk Interface (dynamic channels, max=%d)",
+	pr_info("TashTalk Interface (dynamic channels, max=%d)",
 	       tash_maxdev);
 
 	tastalk_devs =
@@ -978,8 +945,7 @@ static int __init tashtalk_init(void)
 	/* Fill in our line protocol discipline, and register it */
 	status = tty_register_ldisc(&tashtalk_ldisc);
 	if (status != 0) {
-		printk(KERN_ERR
-		       "TaskTalk: can't register line discipline (err = %d)\n",
+		pr_err("TaskTalk: can't register line discipline (err = %d)\n",
 		       status);
 		kfree(tastalk_devs);
 	}
@@ -994,7 +960,7 @@ static void __exit tashtalk_exit(void)
 	int busy = 0;
 	int i;
 
-	if (tastalk_devs == NULL)
+	if (!tastalk_devs)
 		return;
 
 	/* First of all: check for active disciplines and hangup them. */
@@ -1028,7 +994,7 @@ static void __exit tashtalk_exit(void)
 
 		tt = netdev_priv(dev);
 		if (tt->tty) {
-			printk(KERN_ERR "%s: tty discipline still running\n",
+			pr_err("%s: tty discipline still running\n",
 			       dev->name);
 		}
 
@@ -1045,4 +1011,4 @@ module_init(tashtalk_init);
 module_exit(tashtalk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_ALIAS_LDISC(N_PPP);
+MODULE_ALIAS_LDISC(29);
