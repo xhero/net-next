@@ -8,6 +8,7 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
+   appletalk/index
    atm/index
    cable/index
    can/index
