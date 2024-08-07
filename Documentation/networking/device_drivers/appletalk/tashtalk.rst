@@ -62,7 +62,7 @@ port to it:
 
 The line discipline ID for TashTalk is 31. Use of stty is required for
 hardware flow control (and has to be properly implemented in hardware!)
-Once the line desc is attached, the interface should be brought up:
+Once the line disc is attached, the interface should be brought up:
 
     sudo ifconfig lt0 up
 
