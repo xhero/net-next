@@ -73,7 +73,7 @@ struct tashtalk {
 	unsigned char mode;            /* really not used */
 	pid_t pid;
 
-	struct atalk_addr node_addr; /* Full node address */
+	struct atalk_addr node_addr;   /* Full node address */
 };
 
 #define TT_FLAG_INUSE       0 /* Channel in use                     */
@@ -81,6 +81,11 @@ struct tashtalk {
 #define TT_FLAG_INFRAME     2 /* We did not finish decoding a frame */
 #define TT_FLAG_WAITADDR    3 /* We are waiting for an address      */
 #define TT_FLAG_GOTACK      4 /* Received an ACK for our ENQ        */
+
+#define TT_CMD_NOP	    0x00
+#define TT_CMD_TX	    0x01
+#define TT_CMD_SET_NIDS	    0x02
+#define TT_CMD_SET_FEAT	    0x03
 
 #define TASH_MAGIC          0xFDFA
 #define LLAP_CHECK          0xF0B8
@@ -110,22 +115,22 @@ static void tash_setbits(struct tashtalk *tt, unsigned char addr)
 	unsigned char bits[33];
 	unsigned int byte, pos;
 
-	// 0, 255 and anything else are invalid
+	/* 0, 255 and anything else are invalid */
 	if (addr == 0 || addr >= 255)
 		return;
 
 	memset(bits, 0, sizeof(bits));
 
-	// in theory we can respond to many addresses
-	byte = addr / 8 + 1; // skip initial command byte
+	/* in theory we can respond to many addresses */
+	byte = addr / 8 + 1; /* skip initial command byte */
 	pos = (addr % 8);
 
 	if (tash_debug)
 		netdev_dbg(tt->dev,
-			   "TashTalk: setting address %i (byte %i bit %i) for you.",
+			   "Setting address %i (byte %i bit %i) for you.",
 			    addr, byte - 1, pos);
 
-	bits[0] = 0x02; // the command
+	bits[0] = TT_CMD_SET_NIDS;
 	bits[byte] = (1 << pos);
 
 	set_bit(TTY_DO_WRITE_WAKEUP, &tt->tty->flags);
@@ -156,18 +161,19 @@ static void tt_post_to_netif(struct tashtalk *tt)
 	struct net_device *dev = tt->dev;
 	struct sk_buff *skb;
 
-	// before doing stuff, we need to make sure it is not a control frame
-	// Control frames are always 5 bytes long
+	/* before doing stuff, we need to make sure it is not a control frame
+	 * Control frames are always 5 bytes long
+	 */
 	if (tt->rcount <= 5)
 		return;
 
-	// 0xF0B8 is the magic crc nr
+	/* 0xF0B8 is the polynomial used in LLAP */
 	if (tash_crc(tt->rbuff, tt->rcount) != LLAP_CHECK) {
-		netdev_warn(tt->dev, "TashTalk: invalid CRC, drop packet");
+		netdev_warn(tt->dev, "Invalid CRC, drop packet");
 		return;
 	}
 
-	tt->rcount -= 2; // Strip away the CRC bytes
+	tt->rcount -= 2; /* Strip away the CRC bytes */
 	dev->stats.rx_bytes += tt->rcount;
 
 	skb = dev_alloc_skb(tt->rcount);
@@ -176,12 +182,12 @@ static void tt_post_to_netif(struct tashtalk *tt)
 		return;
 	}
 
-	// skip the CRC bytes at the end
+	/* skip the CRC bytes at the end */
 	skb_put_data(skb, tt->rbuff, tt->rcount);
 	skb->dev = dev;
 	skb->protocol = htons(ETH_P_LOCALTALK);
 
-	// This is for compatibility with the phase1 to phase2 translation
+	/* This is for compatibility with the phase1 to phase2 translation */
 	skb_reset_mac_header(skb); /* Point to entire packet. */
 	skb_pull(skb, 3);
 	skb_reset_transport_header(skb); /* Point to data (Skip header). */
@@ -190,7 +196,7 @@ static void tt_post_to_netif(struct tashtalk *tt)
 	dev->stats.rx_packets++;
 }
 
-/* Encapsulate one DDP datagram and stuff into a TTY queue. */
+/* Encapsulate one DDP datagram into a TTY queue. */
 static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 {
 	unsigned char crc_bytes[2];
@@ -203,24 +209,22 @@ static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 
 	memset(tt->xbuff, 0, sizeof(tt->xbuff));
 
-	tt->xbuff[0] = 0x01; // First byte is te Tash SEND command
-	memcpy(&tt->xbuff[1], icp, len); // followed by all the bytes
+	tt->xbuff[0] = TT_CMD_TX; /* First byte is te Tash TRANSMIT command */
+	memcpy(&tt->xbuff[1], icp, len); /* followed by all the bytes */
 	memcpy(&tt->xbuff[1 + len], crc_bytes,
-	       sizeof(crc_bytes)); // lastly follow with the crc
-	len += 3; // We added our own three bytes
+	       sizeof(crc_bytes)); /* lastly follow with the crc */
+	len += 3; /* Account for Tahs CMD + CRC */
 	actual = tt->tty->ops->write(tt->tty, tt->xbuff, len);
 
-	// Any bytes left?
 	tt->xleft = len - actual;
-	// Move the pointer to the correct position
-	// see you in tash_transmit_worker
+	/* see you in tash_transmit_worker */
 	tt->xhead = tt->xbuff + actual;
 
 	print_hex_dump_bytes("TashTalk: LLAP OUT frame sans CRC: ",
 			     DUMP_PREFIX_NONE, icp, len);
 
 	if (tash_debug)
-		netdev_dbg(tt->dev, "TashTalk: transmit actual %i, requested %i",
+		netdev_dbg(tt->dev, "Transmit actual %i, requested %i",
 			   actual, len);
 
 	if (actual == len) {
@@ -244,8 +248,9 @@ static void tash_transmit_worker(struct work_struct *work)
 		return;
 	}
 
-	// We always get here after all transmissions
-	// No more data?
+	/* We always get here after all transmissions
+	 * No more data?
+	 */
 	if (tt->xleft <= 0) {
 		/* reset the flags for transmission
 		 * and re-wake the netif queue
@@ -258,8 +263,9 @@ static void tash_transmit_worker(struct work_struct *work)
 		return;
 	}
 
-	// Send whatever is there to send
-	// This function will be calleg again if xleft <= 0
+	/* Send whatever is there to send
+	 * This function will be calleg again if xleft <= 0
+	 */
 	actual = tt->tty->ops->write(tt->tty, tt->xhead, tt->xleft);
 	tt->xleft -= actual;
 	tt->xhead += actual;
@@ -300,29 +306,23 @@ static netdev_tx_t tt_transmit(struct sk_buff *skb, struct net_device *dev)
 	struct tashtalk *tt = netdev_priv(dev);
 
 	if (skb->len > tt->mtu) {
-		netdev_err(dev,
-			   "TashTalk: %s dropping oversized transmit packet %i vs %i!\n",
-		       dev->name, skb->len, tt->mtu);
+		netdev_err(dev, "Dropping oversized transmit packet %i vs %i!\n",
+			   skb->len, tt->mtu);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
 
-	if (tash_debug)
-		netdev_dbg(dev, "TashTalk: send data on %s\n", dev->name);
-
 	spin_lock(&tt->lock);
 	if (!netif_running(dev)) {
 		spin_unlock(&tt->lock);
-		netdev_err(dev,
-			   "TashTalk: %s: transmit call when iface is down\n",
-		       dev->name);
+		netdev_err(dev, "Transmit call when iface is down\n");
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
 	if (!tt->tty) {
 		spin_unlock(&tt->lock);
 		dev_kfree_skb(skb);
-		netdev_err(dev, "TashTalk: %s: TTY not connected\n", dev->name);
+		netdev_err(dev, "TTY not connected\n");
 		return NETDEV_TX_OK;
 	}
 
@@ -364,7 +364,7 @@ static int tt_open(struct net_device *dev)
 	struct tashtalk *tt = netdev_priv(dev);
 
 	if (!tt->tty) {
-		netdev_err(dev, "TashTalk: %s TTY not open", dev->name);
+		netdev_err(dev, "TTY not open");
 		return -ENODEV;
 	}
 
@@ -374,7 +374,6 @@ static int tt_open(struct net_device *dev)
 }
 
 /* Netdevice get statistics request */
-
 static void tt_get_stats64(struct net_device *dev,
 			   struct rtnl_link_stats64 *stats)
 {
@@ -391,7 +390,7 @@ static void tt_get_stats64(struct net_device *dev,
 	stats->rx_over_errors = devstats->rx_over_errors;
 }
 
-// This has to be blocking for compatibility with netatalk
+/* This has to be blocking for compatibility with netatalk */
 static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 						unsigned char addr)
 {
@@ -399,12 +398,9 @@ static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 	unsigned char rand;
 	int i;
 
-	/* This works a bit backwards, we send many ENQs
-	 * and are happy not to receive ACKs.
-	 * If we get ACK, we try another addr
+	/* Set the ranges, the new address hould stay in the proper one
+	 * I.e. a server should be >= 129 and a client always < 129
 	 */
-
-	// Set the ranges, the new address hould stay in the proper one
 	if (addr < 129) {
 		min = 1;
 		max = 128;
@@ -415,8 +411,12 @@ static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 
 	if (tash_debug)
 		netdev_dbg(tt->dev,
-			   "TashTalk: start address arbitration, requested %i",
-		       addr);
+			   "Start address arbitration, requested %i", addr);
+
+	/* This works a bit backwards, we send many ENQs
+	 * and are happy not to receive ACKs.
+	 * If we get ACK, we try another addr
+	 */
 
 	set_bit(TT_FLAG_WAITADDR, &tt->flags);
 
@@ -424,19 +424,20 @@ static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 		clear_bit(TT_FLAG_GOTACK, &tt->flags);
 		tashtalk_send_ctrl_packet(tt, addr, addr, LLAP_ENQ);
 
-		// Timeout == nobody reclaims our addr
+		/* Timeout == nobody reclaims our addr */
 		if (wait_event_timeout(tt->addr_wait,
 				       test_bit(TT_FLAG_GOTACK, &tt->flags),
 				       msecs_to_jiffies(1))) {
 			unsigned char newaddr;
-			// Oops! somebody has the same addr as us make up a new one and start over
 
+			/* Oops! somebody has the same addr as us
+			 * make up a new one and start over
+			 */
 			get_random_bytes(&rand, 1);
 			newaddr = min + rand % (max - min + 1);
 			if (tash_debug)
-				netdev_dbg(tt->dev,
-					   "TashTalk: addr %i is in use, try %i",
-				       addr, newaddr);
+				netdev_dbg(tt->dev, "Addr %i is in use, try %i",
+					   addr, newaddr);
 			addr = newaddr;
 		}
 	}
@@ -444,7 +445,7 @@ static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 	clear_bit(TT_FLAG_WAITADDR, &tt->flags);
 	clear_bit(TT_FLAG_GOTACK, &tt->flags);
 
-	netdev_info(tt->dev, "TashTalk: arbitrated address is %i", addr);
+	netdev_info(tt->dev, "Arbitrated address is %i", addr);
 
 	return addr;
 }
@@ -471,7 +472,7 @@ static int tt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		dev->addr_len = 1;
 		dev_addr_set(dev, &aa->s_node);
 
-		// Setup tashtalk to respond to that addr
+		/* Setup tashtalk to respond to that addr */
 		tash_setbits(tt, aa->s_node);
 
 		return 0;
@@ -498,8 +499,7 @@ static void tt_free_netdev(struct net_device *dev)
 /* Copied from cops.c, make appletalk happy */
 static void tt_set_multicast(struct net_device *dev)
 {
-	netdev_info(dev, "TashTalk: %s set_multicast_list executed\n",
-		    dev->name);
+	netdev_dbg(dev, "set_multicast_list executed\n");
 }
 
 static const struct net_device_ops tt_netdev_ops = {
@@ -515,7 +515,7 @@ static const struct net_device_ops tt_netdev_ops = {
 static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
 				      unsigned char src, unsigned char type)
 {
-	unsigned char cmd = 0x01;
+	unsigned char cmd = TT_CMD_TX;
 	unsigned char buf[5];
 	int actual;
 	u16 crc;
@@ -540,9 +540,8 @@ static void tashtalk_manage_control_frame(struct tashtalk *tt)
 		if (tt->node_addr.s_node != 0 &&
 		    tt->rbuff[LLAP_SRC_POS] == tt->node_addr.s_node) {
 			if (tash_debug) {
-				netdev_dbg(tt->dev,
-					   "TashTalk: repply ACK to ENQ from %i",
-				       tt->rbuff[LLAP_SRC_POS]);
+				netdev_dbg(tt->dev, "Repply ACK to ENQ from %i",
+					   tt->rbuff[LLAP_SRC_POS]);
 			}
 
 			tashtalk_send_ctrl_packet(tt, tt->rbuff[LLAP_SRC_POS],
@@ -573,11 +572,11 @@ static void tashtalk_manage_valid_frame(struct tashtalk *tt)
 		netdev_dbg(tt->dev, "(3) TashTalk done frame, len=%i",
 			   tt->rcount);
 
-	// echo 'file tashtalk.c line 403 +p' > /sys/kernel/debug/dynamic_debug/control
+	/* echo 'file tashtalk.c line 403 +p' > /sys/kernel/debug/dynamic_debug/control */
 	print_hex_dump_bytes("(3a) LLAP IN frame: ", DUMP_PREFIX_NONE,
 			     tt->rbuff, tt->rcount);
 
-	// Control frames are not sent to the netif
+	/* Control frames are not sent to the netif */
 	if (tt->rcount == 5 && tashtalk_is_control_frame(tt->rbuff))
 		tashtalk_manage_control_frame(tt);
 	else
@@ -594,17 +593,17 @@ static void tashtalk_manage_escape(struct tashtalk *tt, unsigned char seq)
 		tashtalk_manage_valid_frame(tt);
 		break;
 	case 0xFE:
-		netdev_err(tt->dev, "TashTalk: frame error");
+		netdev_info(tt->dev, "Frame error");
 		break;
 	case 0xFA:
-		netdev_err(tt->dev, "TashTalk: frame abort");
+		netdev_info(tt->dev, "Frame abort");
 		break;
 	case 0xFC:
-		netdev_err(tt->dev, "TashTalk: frame crc error");
+		netdev_info(tt->dev, "Frame crc error");
 		break;
 
 	default:
-		netdev_err(tt->dev, "TashTalk: unknown escape sequence %c", seq);
+		netdev_warn(tt->dev, "Unknown escape sequence %c", seq);
 		break;
 	}
 
@@ -631,7 +630,6 @@ static void tashtalk_receive_buf(struct tty_struct *tty,
 
 	print_hex_dump_bytes("Tash read: ", DUMP_PREFIX_NONE, cp, count);
 
-	// Fresh frame
 	if (!test_bit(TT_FLAG_INFRAME, &tt->flags)) {
 		tt->rcount = 0;
 		if (tash_debug)
@@ -682,7 +680,7 @@ static int tt_alloc_bufs(struct tashtalk *tt, int mtu)
 	char *xbuff = NULL;
 	unsigned long len;
 
-	// Make enough space? FIXME I guess
+	/* Make enough space for CRC */
 	len = mtu * 2;
 
 	rbuff = kmalloc(len + 4, GFP_KERNEL);
@@ -757,8 +755,8 @@ static struct tashtalk *tt_alloc(void)
 	tt->dev->type = ARPHRD_LOCALTLK;
 	tt->dev->priv_destructor = tt_free_netdev;
 
-	// Initially we have no address
-	// so we do not reply to ENQs
+	/* Initially we have no address */
+	/* so we do not reply to ENQs */
 	tt->node_addr.s_node = 0;
 	tt->node_addr.s_net = 0;
 
@@ -893,7 +891,6 @@ static int tashtalk_ioctl(struct tty_struct *tty, unsigned int cmd,
 			return -EFAULT;
 		return 0;
 
-	// do we need mode?
 	case SIOCGIFENCAP:
 		if (put_user(tt->mode, p))
 			return -EFAULT;
@@ -915,7 +912,7 @@ static int tashtalk_ioctl(struct tty_struct *tty, unsigned int cmd,
 
 static struct tty_ldisc_ops tashtalk_ldisc = {
 	.owner = THIS_MODULE,
-	.num = 29, // this is the official one for testing
+	.num = N_TASHTALK,
 	.name = "tasktalk",
 	.open = tashtalk_open,
 	.close = tashtalk_close,
@@ -1006,4 +1003,4 @@ module_init(tashtalk_init);
 module_exit(tashtalk_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_ALIAS_LDISC(29);
+MODULE_ALIAS_LDISC(N_TASHTALK);
