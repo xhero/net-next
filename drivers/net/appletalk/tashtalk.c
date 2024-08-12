@@ -50,6 +50,10 @@ static unsigned int tash_debug = TASH_DEBUG;
  */
 #define TASH_MAX_CHAN 32
 #define TT_MTU 605
+/* The buffer should be double since potentially 
+ * all bytes inside are escaped.
+ */
+#define BUF_LEN (TT_MTU * 2 + 4)
 
 struct tashtalk {
 	int magic;
@@ -199,20 +203,24 @@ static void tt_post_to_netif(struct tashtalk *tt)
 /* Encapsulate one DDP datagram into a TTY queue. */
 static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 {
-	unsigned char crc_bytes[2];
 	int actual;
 	u16 crc;
 
-	crc = tash_crc(icp, len);
-	crc_bytes[0] = (crc & 0xFF) ^ 0xFF;
-	crc_bytes[1] = (crc >> 8) ^ 0xFF;
+	/* This should not happen as we check beforehand */
+	if (len + 3 > BUF_LEN) {
+		netdev_err(tt->dev, "Dropping oversized buffer\n");
+		return;
+	}
 
+	crc = tash_crc(icp, len);
 	memset(tt->xbuff, 0, sizeof(tt->xbuff));
 
 	tt->xbuff[0] = TT_CMD_TX; /* First byte is te Tash TRANSMIT command */
 	memcpy(&tt->xbuff[1], icp, len); /* followed by all the bytes */
-	memcpy(&tt->xbuff[1 + len], crc_bytes,
-	       sizeof(crc_bytes)); /* lastly follow with the crc */
+	/* Last two bytes are the CRC */
+	tt->xbuff[1 + len] = ~(crc & 0xFF);
+	tt->xbuff[2 + len] = ~(crc >> 8);
+
 	len += 3; /* Account for Tash CMD + CRC */
 	actual = tt->tty->ops->write(tt->tty, tt->xbuff, len);
 
@@ -525,8 +533,8 @@ static void tashtalk_send_ctrl_packet(struct tashtalk *tt, unsigned char dst,
 	buf[LLAP_TYP_POS] = type;
 
 	crc = tash_crc(buf, 3);
-	buf[3] = (crc & 0xFF) ^ 0xFF;
-	buf[4] = (crc >> 8) ^ 0xFF;
+	buf[3] = ~(crc & 0xFF);
+	buf[4] = ~(crc >> 8);
 
 	actual = tt->tty->ops->write(tt->tty, &cmd, 1);
 	actual += tt->tty->ops->write(tt->tty, buf, sizeof(buf));
@@ -572,7 +580,6 @@ static void tashtalk_manage_valid_frame(struct tashtalk *tt)
 		netdev_dbg(tt->dev, "(3) TashTalk done frame, len=%i",
 			   tt->rcount);
 
-	/* echo 'file tashtalk.c line 403 +p' > /sys/kernel/debug/dynamic_debug/control */
 	print_hex_dump_bytes("(3a) LLAP IN frame: ", DUMP_PREFIX_NONE,
 			     tt->rbuff, tt->rcount);
 
@@ -673,21 +680,18 @@ static void tt_free_bufs(struct tashtalk *tt)
 	kfree(xchg(&tt->xbuff, NULL));
 }
 
-static int tt_alloc_bufs(struct tashtalk *tt, int mtu)
+static int tt_alloc_bufs(struct tashtalk *tt, int buf_len)
 {
 	int err = -ENOBUFS;
 	char *rbuff = NULL;
 	char *xbuff = NULL;
 	unsigned long len;
 
-	/* Make enough space for CRC */
-	len = mtu * 2;
-
-	rbuff = kmalloc(len + 4, GFP_KERNEL);
+	rbuff = kmalloc(buf_len, GFP_KERNEL);
 	if (!rbuff)
 		goto err_exit;
 
-	xbuff = kmalloc(len + 4, GFP_KERNEL);
+	xbuff = kmalloc(buf_len, GFP_KERNEL);
 	if (!xbuff)
 		goto err_exit;
 
@@ -806,7 +810,7 @@ static int tashtalk_open(struct tty_struct *tty)
 	if (!test_bit(TT_FLAG_INUSE, &tt->flags)) {
 		set_bit(TT_FLAG_INUSE, &tt->flags);
 
-		err = tt_alloc_bufs(tt, TT_MTU);
+		err = tt_alloc_bufs(tt, BUF_LEN);
 		if (err)
 			goto err_free_chan;
 
