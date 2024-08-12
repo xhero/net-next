@@ -173,14 +173,14 @@ static void tt_post_to_netif(struct tashtalk *tt)
 
 	/* 0xF0B8 is the polynomial used in LLAP */
 	if (tash_crc(tt->rbuff, tt->rcount) != LLAP_CHECK) {
-		netdev_warn(tt->dev, "Invalid CRC, drop packet");
+		netdev_warn(dev, "Invalid CRC, drop packet");
 		return;
 	}
 
 	tt->rcount -= 2; /* Strip away the CRC bytes */
 	dev->stats.rx_bytes += tt->rcount;
 
-	skb = dev_alloc_skb(tt->rcount);
+	skb = netdev_alloc_skb(dev, tt->rcount);
 	if (!skb) {
 		dev->stats.rx_dropped++;
 		return;
@@ -188,7 +188,6 @@ static void tt_post_to_netif(struct tashtalk *tt)
 
 	/* skip the CRC bytes at the end */
 	skb_put_data(skb, tt->rbuff, tt->rcount);
-	skb->dev = dev;
 	skb->protocol = htons(ETH_P_LOCALTALK);
 
 	/* This is for compatibility with the phase1 to phase2 translation */
