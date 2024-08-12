@@ -99,7 +99,7 @@ struct tashtalk {
 #define LLAP_SRC_POS        1
 #define LLAP_TYP_POS        2
 
-static struct net_device **tastalk_devs;
+static struct net_device **tashtalk_devs;
 
 static int tash_maxdev = TASH_MAX_CHAN;
 module_param(tash_maxdev, int, 0);
@@ -213,7 +213,7 @@ static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 	memcpy(&tt->xbuff[1], icp, len); /* followed by all the bytes */
 	memcpy(&tt->xbuff[1 + len], crc_bytes,
 	       sizeof(crc_bytes)); /* lastly follow with the crc */
-	len += 3; /* Account for Tahs CMD + CRC */
+	len += 3; /* Account for Tash CMD + CRC */
 	actual = tt->tty->ops->write(tt->tty, tt->xbuff, len);
 
 	tt->xleft = len - actual;
@@ -264,7 +264,7 @@ static void tash_transmit_worker(struct work_struct *work)
 	}
 
 	/* Send whatever is there to send
-	 * This function will be calleg again if xleft <= 0
+	 * This function will be called again if xleft <= 0
 	 */
 	actual = tt->tty->ops->write(tt->tty, tt->xhead, tt->xleft);
 	tt->xleft -= actual;
@@ -465,7 +465,7 @@ static int tt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		aa->s_net = sa->sat_addr.s_net;
 		aa->s_node = sa->sat_addr.s_node;
 
-		/* Set broardcast address. */
+		/* Set broadcast address. */
 		dev->broadcast[0] = 0xFF;
 
 		/* Set hardware address. */
@@ -493,7 +493,7 @@ static void tt_free_netdev(struct net_device *dev)
 {
 	int i = dev->base_addr;
 
-	tastalk_devs[i] = NULL;
+	tashtalk_devs[i] = NULL;
 }
 
 /* Copied from cops.c, make appletalk happy */
@@ -540,7 +540,7 @@ static void tashtalk_manage_control_frame(struct tashtalk *tt)
 		if (tt->node_addr.s_node != 0 &&
 		    tt->rbuff[LLAP_SRC_POS] == tt->node_addr.s_node) {
 			if (tash_debug) {
-				netdev_dbg(tt->dev, "Repply ACK to ENQ from %i",
+				netdev_dbg(tt->dev, "Reply ACK to ENQ from %i",
 					   tt->rbuff[LLAP_SRC_POS]);
 			}
 
@@ -724,7 +724,7 @@ static struct tashtalk *tt_alloc(void)
 	int i;
 
 	for (i = 0; i < tash_maxdev; i++) {
-		dev = tastalk_devs[i];
+		dev = tashtalk_devs[i];
 		if (!dev)
 			break;
 	}
@@ -764,12 +764,12 @@ static struct tashtalk *tt_alloc(void)
 	init_waitqueue_head(&tt->addr_wait);
 	INIT_WORK(&tt->tx_work, tash_transmit_worker);
 
-	tastalk_devs[i] = dev;
+	tashtalk_devs[i] = dev;
 	return tt;
 }
 
 /* Open the high-level part of the TashTalk channel.
- * Generally used with an userspave program:
+ * Generally used with an userspace program:
  * sudo ldattach -d -s 1000000 PPP /dev/ttyUSB0
  */
 
@@ -932,9 +932,9 @@ static int __init tashtalk_init(void)
 	pr_info("TashTalk Interface (dynamic channels, max=%d)",
 		tash_maxdev);
 
-	tastalk_devs =
+	tashtalk_devs =
 		kcalloc(tash_maxdev, sizeof(struct net_device *), GFP_KERNEL);
-	if (!tastalk_devs)
+	if (!tashtalk_devs)
 		return -ENOMEM;
 
 	/* Fill in our line protocol discipline, and register it */
@@ -942,7 +942,7 @@ static int __init tashtalk_init(void)
 	if (status != 0) {
 		pr_err("TaskTalk: can't register line discipline (err = %d)\n",
 		       status);
-		kfree(tastalk_devs);
+		kfree(tashtalk_devs);
 	}
 	return status;
 }
@@ -955,7 +955,7 @@ static void __exit tashtalk_exit(void)
 	int busy = 0;
 	int i;
 
-	if (!tastalk_devs)
+	if (!tashtalk_devs)
 		return;
 
 	/* First of all: check for active disciplines and hangup them. */
@@ -965,7 +965,7 @@ static void __exit tashtalk_exit(void)
 
 		busy = 0;
 		for (i = 0; i < tash_maxdev; i++) {
-			dev = tastalk_devs[i];
+			dev = tashtalk_devs[i];
 			if (!dev)
 				continue;
 			tt = netdev_priv(dev);
@@ -979,10 +979,10 @@ static void __exit tashtalk_exit(void)
 	} while (busy && time_before(jiffies, timeout));
 
 	for (i = 0; i < tash_maxdev; i++) {
-		dev = tastalk_devs[i];
+		dev = tashtalk_devs[i];
 		if (!dev)
 			continue;
-		tastalk_devs[i] = NULL;
+		tashtalk_devs[i] = NULL;
 
 		tt = netdev_priv(dev);
 		if (tt->tty) {
@@ -993,8 +993,8 @@ static void __exit tashtalk_exit(void)
 		unregister_netdev(dev);
 	}
 
-	kfree(tastalk_devs);
-	tastalk_devs = NULL;
+	kfree(tashtalk_devs);
+	tashtalk_devs = NULL;
 
 	tty_unregister_ldisc(&tashtalk_ldisc);
 }
