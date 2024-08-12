@@ -20,28 +20,30 @@ historically very difficult to obtain, making LocalTalk on Linux
 impractical. In recent years, a vibrant community of enthusiasts has
 produced many tools to ease connecting older machines to the modern
 world. One such project is TashTalk, which implements LocalTalk on a
-PIC microcontroller (https://github.com/lampmerchant/tashtalk). 
-This driver reintroduces LocalTalk support to the Kernel by providing 
-an interface to TashTalk, which can be easily used over a serial port. 
-It comes handy for use with older machines that have no thernet option, 
+PIC microcontroller (https://github.com/lampmerchant/tashtalk).
+
+This driver reintroduces LocalTalk support to the Kernel by providing
+an interface to TashTalk, which can be easily used over a serial port.
+It comes handy for use with older machines that have no thernet option,
 since all early Macintoshes had LocalTalk built-in.
 
 Introduction
 ------------
 
-The LocalTalk netweork implemented one of the phisical layers for the
-AppleTalk, using an RS422 bus, with FM0 and SDLC encoding, and on Macs
-it was managed using the build-in Zilog SCC Z8530. In the modern world,
-the required interface is implemented using TashTalk, which then
-communicates to a PC via a serial port or serial adapter, or a specialized
-adapter (https://github.com/xhero/USB2LT) to directly connect an LocalTalk
-network via an USB port. Since support for LocalTalk is still present
-in the Kernel, it is then possible to user Netatalk 2 (or the upcoming
-version 4) out of the box. The interface is also compatibile with
-macipgw (https://github.com/jasonking3/macipgw) to provide MacIP over
-Localtalk.
-This driver implements a Line Discipline which must be attached and
-then the LocalTalk interface can be brought up and used.
+The LocalTalk network implemented one of the physical layers for AppleTalk,
+utilizing an RS422 bus with FM0 and SDLC encoding. On Macs, it was managed
+by the built-in Zilog SCC Z8530. In the modern context, this interface is
+provided by TashTalk, which communicates with a PC via a serial port or
+adapter, or through a specialized adapter (https://github.com/xhero/USB2LT)
+that directly connects a LocalTalk network via a USB port.
+
+Since LocalTalk support is still present in the Linux kernel, it is possible
+to use Netatalk 2 (or the upcoming version 4) directly. The interface is also
+compatible with macipgw (https://github.com/jasonking3/macipgw) to provide
+MacIP over LocalTalk.
+
+This driver implements a line discipline that must be attached, after which
+the LocalTalk interface can be brought up and used.
 
 Operation/loading of the driver
 -------------------------------
@@ -70,7 +72,7 @@ or
 
     sudo ifconfig lt0 up
 
-Any number (up to the specified max devices) of lt interfaces can be 
+Any number (up to the specified max devices) of lt interfaces can be
 used, which will be numbered lt0-ltN
 
 Configuring Netatalk
@@ -87,7 +89,7 @@ make shares and printers available on the Localtalk network.
 Multiple adapters can be used together:
 
     lt0 -seed -phase 2 -net 1 -addr 1.129 -zone "AirTalk"
-    lt1 -seed -phase 2 -net 2 -addr 2.130 -zone "LocalTalk
+    lt1 -seed -phase 2 -net 2 -addr 2.130 -zone "LocalTalk"
 
 And also different type of adapters (like Ethernet) can be mixed in
 the Netatalk routing.
@@ -128,3 +130,10 @@ Please consult the current source for the exact line numbers.
 Credits
 -------
 
+Many thanks to Tashtari (https://github.com/lampmerchant) for his TashTalk
+implementation of LocalTalk, as well as his invaluable assistance in debugging this
+driver and his unwavering support throughout the project.
+
+Special thanks to Doug Brown for his invaluable help, patience, thorough reviews,
+and insightful comments on my code, as well as his support throughout the
+submission process.
