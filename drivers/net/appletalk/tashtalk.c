@@ -212,7 +212,6 @@ static void tt_send_frame(struct tashtalk *tt, unsigned char *icp, int len)
 	}
 
 	crc = tash_crc(icp, len);
-	memset(tt->xbuff, 0, sizeof(tt->xbuff));
 
 	tt->xbuff[0] = TT_CMD_TX; /* First byte is te Tash TRANSMIT command */
 	memcpy(&tt->xbuff[1], icp, len); /* followed by all the bytes */
