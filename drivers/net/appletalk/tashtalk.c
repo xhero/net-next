@@ -50,7 +50,7 @@ static unsigned int tash_debug = TASH_DEBUG;
  */
 #define TASH_MAX_CHAN 32
 #define TT_MTU 605
-/* The buffer should be double since potentially 
+/* The buffer should be double since potentially
  * all bytes inside are escaped.
  */
 #define BUF_LEN (TT_MTU * 2 + 4)
@@ -771,7 +771,7 @@ static struct tashtalk *tt_alloc(void)
 }
 
 /* Open the high-level part of the TashTalk channel.
- * Generally used with an userspace program:
+ * Generally used with a userspace program:
  * sudo ldattach -d -s 1000000 PPP /dev/ttyUSB0
  */
 
