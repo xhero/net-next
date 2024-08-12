@@ -64,6 +64,10 @@ The line discipline ID for TashTalk is 31. Use of stty is required for
 hardware flow control (and has to be properly implemented in hardware!)
 Once the line disc is attached, the interface should be brought up:
 
+    sudo ip link set dev lt0 up
+
+or
+
     sudo ifconfig lt0 up
 
 Any number (up to the specified max devices) of lt interfaces can be 
@@ -83,10 +87,27 @@ make shares and printers available on the Localtalk network.
 Multiple adapters can be used together:
 
     lt0 -seed -phase 2 -net 1 -addr 1.129 -zone "AirTalk"
-    lt1 -seed -phase 2 -net 2 -addr 2.128 -zone "LocalTalk
+    lt1 -seed -phase 2 -net 2 -addr 2.130 -zone "LocalTalk
 
 And also different type of adapters (like Ethernet) can be mixed in
 the Netatalk routing.
+
+Addressing
+----------
+
+LocalTalk addresses are dynamically assigned by default. In the Linux
+implementation, a user program must request a preferred address, which
+the driver will attempt to allocate. If the preferred address is unavailable,
+the driver will suggest a new, randomly generated one, as specified by the
+LocalTalk protocol. The user program should then retrieve the assigned address.
+
+In the COPS LocalTalk implementation, this process was handled in a blocking
+manner, and Netatalk continues to expect this behavior. The same approach is
+implemented in this driver. When the user program issues a `SIOCSIFADDR` ioctl,
+it triggers the address arbitration algorithm. The ioctl call will only return
+once the arbitration is complete. Subsequently, a `SIOCGIFADDR` ioctl is required
+to obtain the actual assigned address.
+
 
 Debug
 -----
@@ -95,5 +116,15 @@ Despite the name, tcpdump is able to understand DDP and basic AppleTalk packets:
 
     sudo tcpdump -i lt0 -vvvX
 
-The driver can also be recompiled settin the TASH_DEBUG option, to have a more
+The driver can also be recompiled setting the TASH_DEBUG option, to have a more
 verbose log of what is going on.
+
+`print_hex_dump_bytes` is used to print incoming and outgoing packets
+
+    echo 'file tashtalk.c line 231 +p' > /sys/kernel/debug/dynamic_debug/control
+
+Please consult the current source for the exact line numbers.
+
+Credits
+-------
+
