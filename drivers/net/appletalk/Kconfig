@@ -7,17 +7,28 @@ config DEV_APPLETALK
 	tristate "Appletalk interfaces support"
 	depends on ATALK
 	help
-	  AppleTalk is the protocol that Apple computers can use to communicate
-	  on a network. It can run on a different set of physical interfaces,
-	  if you have such an interface (such as a LocalTalk serial adapter)
-	  say Y here.
+	  AppleTalk is a network protocol developed by Apple that allows Apple
+	  computers to communicate with each other over a network. This protocol
+	  is versatile and can operate over various types of physical interfaces.
+	  For instance, if you have a specific physical interface available,
+	  such as a LocalTalk serial adapter, you can enable support for it by
+	  selecting "Y" here. It's important to note that this support is
+	  specifically for non-Ethernet devices, which are natively supported
+	  by the appletalk driver
+
+	  By enabling this option, you ensure that your system can utilize the
+	  AppleTalk protocol over these alternative interfaces, allowing legacy
+	  Apple devices to communicate with your moder machines.
 
 config TASHTALK
 	tristate "TashTalk LocalTalk Interface Support"
 	depends on ATALK && DEV_APPLETALK
 	depends on NETDEVICES
 	help
-	  TashTalk is a serial adapter for LocalTalk interfaces. This driver
-	  will then work natively with Netatalk.
+	  TashTalk is a serial adapter for LocalTalk interfaces. It permits
+	  to natively connect to a LocalTalk bus via a serial port or USB
+	  adapter. It will then work natively with Netatalk, and it can be
+	  used to communicate with a network of classic Macintoshes or
+	  compatibile systems.
 	  <file:Documentation/networking/device_drivers/appletalk/tashtalk.rst>.
 
