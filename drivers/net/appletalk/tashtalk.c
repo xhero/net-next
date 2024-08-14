@@ -404,7 +404,7 @@ static unsigned char tt_arbitrate_addr_blocking(struct tashtalk *tt,
 	unsigned char rand;
 	int i;
 
-	/* Set the ranges, the new addresss hould stay in the proper one
+	/* Set the ranges, the new address hould stay in the proper one
 	 * I.e. a server should be >= 129 and a client always < 129
 	 */
 	min = (addr < 129) ? 1 : 129;
