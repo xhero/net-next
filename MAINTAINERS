@@ -22237,6 +22237,13 @@ F:	Documentation/filesystems/sysv-fs.rst
 F:	fs/sysv/
 F:	include/linux/sysv_fs.h
 
+TASHTALK APPLETALK DRIVER
+M:	Rodolfo Zitellini <rwz@xhero.org>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/networking/device_drivers/appletalk/tashtalk.rst
+F:	drivers/net/can/appletalk/tashtalk.c
+
 TASKSTATS STATISTICS INTERFACE
 M:	Balbir Singh <bsingharora@gmail.com>
 S:	Maintained

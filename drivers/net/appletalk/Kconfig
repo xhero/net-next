@@ -8,15 +8,16 @@ config DEV_APPLETALK
 	depends on ATALK
 	help
 	  AppleTalk is the protocol that Apple computers can use to communicate
-	  on a network.  If your Linux box is connected to such a network, and wish
-	  to do IP over it, or you have a LocalTalk card and wish to use it to
-	  connect to the AppleTalk network, say Y.
+	  on a network. It can run on a different set of physical interfaces,
+	  if you have such an interface (such as a LocalTalk serial adapter)
+	  say Y here.
 
 config TASHTALK
-	tristate "TashTalk LocalTalk Interface SUpport"
+	tristate "TashTalk LocalTalk Interface Support"
 	depends on ATALK && DEV_APPLETALK
 	depends on NETDEVICES
 	help
-	  Please read the file
+	  TashTalk is a serial adapter for LocalTalk interfaces. This driver
+	  will then work natively with Netatalk.
 	  <file:Documentation/networking/device_drivers/appletalk/tashtalk.rst>.
 
